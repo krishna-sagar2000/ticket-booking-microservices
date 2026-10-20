@@ -7,6 +7,7 @@ import uuid
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from . import config
+from .api.payments import router as payments_router
 from .errors import (AppError, app_error_handler, validation_error_handler,
                      unhandled_error_handler)
 from .logging_setup import correlation_id_var, setup_logging
@@ -15,6 +16,7 @@ SERVICE_NAME = "payment-service"
 log = setup_logging(SERVICE_NAME)
 
 app = FastAPI(title="Payment Service", version="1.0.0")
+app.include_router(payments_router)
 app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(Exception, unhandled_error_handler)
