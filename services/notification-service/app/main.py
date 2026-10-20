@@ -4,9 +4,12 @@ Run:  uvicorn app.main:app --port 8004 --reload
 Docs: http://localhost:8004/docs
 """
 import uuid
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from . import config
+from . import config, db
+from .api import router as notifications_router
 from .errors import (AppError, app_error_handler, validation_error_handler,
                      unhandled_error_handler)
 from .logging_setup import correlation_id_var, setup_logging
@@ -14,7 +17,15 @@ from .logging_setup import correlation_id_var, setup_logging
 SERVICE_NAME = "notification-service"
 log = setup_logging(SERVICE_NAME)
 
-app = FastAPI(title="Notification Service", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db.init_db()
+    log.info("notification_db tables ensured")
+    yield
+
+
+app = FastAPI(title="Notification Service", version="1.0.0", lifespan=lifespan)
 app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(Exception, unhandled_error_handler)
@@ -36,5 +47,4 @@ def health():
     return {"status": "UP", "service": SERVICE_NAME}
 
 
-# TODO (owner): add your routes under /api/v1/... in app/api/ and include the router here.
-# TODO (owner): put business rules in app/rules.py and database code in app/db.py.
+app.include_router(notifications_router)
