@@ -1,0 +1,547 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Booking Service",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/health": {
+            "get": {
+                "tags": [
+                    "health"
+                ],
+                "summary": "Health",
+                "operationId": "health_health_get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/bookings": {
+            "post": {
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Create a booking and hold its seats (state HELD)",
+                "operationId": "create_booking_api_v1_bookings_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateBookingRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BookingResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/bookings/{booking_id}": {
+            "get": {
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Read a booking",
+                "operationId": "get_booking_api_v1_bookings__booking_id__get",
+                "parameters": [
+                    {
+                        "name": "booking_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Booking Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BookingResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/bookings/{booking_id}/pay": {
+            "post": {
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Pay for a HELD booking (Idempotency-Key header required)",
+                "operationId": "pay_booking_api_v1_bookings__booking_id__pay_post",
+                "parameters": [
+                    {
+                        "name": "booking_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Booking Id"
+                        }
+                    },
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Idempotency-Key"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BookingResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Conflict"
+                    },
+                    "422": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Unprocessable Content"
+                    },
+                    "503": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Service Unavailable"
+                    }
+                }
+            }
+        },
+        "/api/v1/bookings/{booking_id}/cancel": {
+            "post": {
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Cancel a HELD booking and release its seats",
+                "operationId": "cancel_booking_api_v1_bookings__booking_id__cancel_post",
+                "parameters": [
+                    {
+                        "name": "booking_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Booking Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BookingResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Conflict"
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/bookings/expire": {
+            "post": {
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Mark HELD bookings whose hold has passed as EXPIRED (safe to run twice)",
+                "operationId": "expire_bookings_api_v1_bookings_expire_post",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ExpireResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "BookingResponse": {
+                "properties": {
+                    "bookingId": {
+                        "type": "string",
+                        "title": "Bookingid"
+                    },
+                    "eventId": {
+                        "type": "integer",
+                        "title": "Eventid"
+                    },
+                    "seats": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array",
+                        "title": "Seats"
+                    },
+                    "customerEmail": {
+                        "type": "string",
+                        "title": "Customeremail"
+                    },
+                    "amount": {
+                        "type": "number",
+                        "title": "Amount"
+                    },
+                    "status": {
+                        "type": "string",
+                        "title": "Status",
+                        "description": "HELD | CONFIRMED | CANCELLED | EXPIRED"
+                    },
+                    "holdExpiresAt": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Holdexpiresat"
+                    },
+                    "paymentId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Paymentid"
+                    },
+                    "createdAt": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Createdat"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "bookingId",
+                    "eventId",
+                    "seats",
+                    "customerEmail",
+                    "amount",
+                    "status",
+                    "holdExpiresAt",
+                    "createdAt"
+                ],
+                "title": "BookingResponse"
+            },
+            "CreateBookingRequest": {
+                "properties": {
+                    "eventId": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0.0,
+                        "title": "Eventid",
+                        "examples": [
+                            1
+                        ]
+                    },
+                    "seats": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array",
+                        "minItems": 1,
+                        "title": "Seats",
+                        "examples": [
+                            [
+                                "A1",
+                                "A2"
+                            ]
+                        ]
+                    },
+                    "customerEmail": {
+                        "type": "string",
+                        "maxLength": 255,
+                        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+                        "title": "Customeremail",
+                        "examples": [
+                            "asha@example.com"
+                        ]
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "eventId",
+                    "seats",
+                    "customerEmail"
+                ],
+                "title": "CreateBookingRequest"
+            },
+            "ErrorResponse": {
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "title": "Code"
+                    },
+                    "message": {
+                        "type": "string",
+                        "title": "Message"
+                    },
+                    "correlationId": {
+                        "type": "string",
+                        "title": "Correlationid"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "code",
+                    "message",
+                    "correlationId"
+                ],
+                "title": "ErrorResponse"
+            },
+            "ExpireResponse": {
+                "properties": {
+                    "expiredCount": {
+                        "type": "integer",
+                        "title": "Expiredcount"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "expiredCount"
+                ],
+                "title": "ExpireResponse"
+            },
+            "HTTPValidationError": {
+                "properties": {
+                    "detail": {
+                        "items": {
+                            "$ref": "#/components/schemas/ValidationError"
+                        },
+                        "type": "array",
+                        "title": "Detail"
+                    }
+                },
+                "type": "object",
+                "title": "HTTPValidationError"
+            },
+            "ValidationError": {
+                "properties": {
+                    "loc": {
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "integer"
+                                }
+                            ]
+                        },
+                        "type": "array",
+                        "title": "Location"
+                    },
+                    "msg": {
+                        "type": "string",
+                        "title": "Message"
+                    },
+                    "type": {
+                        "type": "string",
+                        "title": "Error Type"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "loc",
+                    "msg",
+                    "type"
+                ],
+                "title": "ValidationError"
+            }
+        }
+    }
+}
