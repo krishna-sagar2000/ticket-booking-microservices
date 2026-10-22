@@ -1,0 +1,34 @@
+[19:19:46Z] Using seat 1 (unpaid hold) and seat 2 (paid)
+
+1. Create the holds
+[19:19:46Z] POST /1/hold {'bookingId': 'exp-unpaid'} -> 200 {'seatId': 1, 'status': 'HELD', 'holdExpiresAt': '2026-10-22T19:20:16Z'}
+[19:19:46Z] POST /2/hold {'bookingId': 'exp-paid'} -> 200 {'seatId': 2, 'status': 'HELD', 'holdExpiresAt': '2026-10-22T19:20:16Z'}
+[19:19:46Z] POST /2/confirm {'bookingId': 'exp-paid'} -> 200 {'seatId': 2, 'status': 'BOOKED'}
+
+2. Sweep before the hold time is up
+[19:19:46Z] POST /expire-holds  -> 200 {'expiredCount': 0}
+    PASS  unexpired hold is kept (expiredCount 0)
+    PASS  seat 1 still HELD
+
+3. Waiting 31 s until past holdExpiresAt 2026-10-22T19:20:16Z
+
+4. Sweep after expiry
+[19:20:18Z] POST /expire-holds  -> 200 {'expiredCount': 1}
+    PASS  exactly the unpaid hold expired (expiredCount 1)
+[19:20:18Z] seat 1: {'seatId': 1, 'label': 'A1', 'status': 'AVAILABLE', 'bookingId': None, 'holdExpiresAt': None}
+[19:20:18Z] seat 2: {'seatId': 2, 'label': 'A2', 'status': 'BOOKED', 'bookingId': 'exp-paid', 'holdExpiresAt': None}
+    PASS  seat 1 released -> AVAILABLE, booking cleared
+    PASS  paid seat 2 still BOOKED by exp-paid
+
+5. Sweep again
+[19:20:18Z] POST /expire-holds  -> 200 {'expiredCount': 0}
+    PASS  second sweep is a no-op (expiredCount 0)
+
+6. The expired booking can no longer use the seat; a new booking can
+[19:20:18Z] POST /1/confirm {'bookingId': 'exp-unpaid'} -> 409 {'code': 'INVALID_STATE_CHANGE', 'message': 'Seat is not held by this booking', 'correlationId': 'challenge-3b-seat'}
+    PASS  old booking cannot confirm (409)
+[19:20:18Z] POST /1/hold {'bookingId': 'exp-new'} -> 200 {'seatId': 1, 'status': 'HELD', 'holdExpiresAt': '2026-10-22T19:20:48Z'}
+    PASS  new booking can hold the released seat (200)
+[19:20:18Z] POST /1/release {'bookingId': 'exp-new'} -> 200 {'seatId': 1, 'status': 'AVAILABLE'}
+
+RESULT: PASS (8/8 checks)

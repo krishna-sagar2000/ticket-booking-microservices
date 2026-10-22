@@ -1,0 +1,15 @@
+-- seat_db.seats after seat_hold_expiry.py (unpaid seat released, paid seat still BOOKED)
++----+-------+-----------+------------+------------+
+| id | label | status    | booking_id | held_until |
++----+-------+-----------+------------+------------+
+|  1 | A1    | AVAILABLE | NULL       | NULL       |
+|  2 | A2    | BOOKED    | exp-paid   | NULL       |
+|  3 | A3    | AVAILABLE | NULL       | NULL       |
+|  4 | A4    | AVAILABLE | NULL       | NULL       |
+|  5 | A5    | AVAILABLE | NULL       | NULL       |
+|  6 | A6    | AVAILABLE | NULL       | NULL       |
+|  7 | A7    | AVAILABLE | NULL       | NULL       |
+|  8 | A8    | AVAILABLE | NULL       | NULL       |
+|  9 | A9    | AVAILABLE | NULL       | NULL       |
+| 10 | A10   | AVAILABLE | NULL       | NULL       |
++----+-------+-----------+------------+------------+
