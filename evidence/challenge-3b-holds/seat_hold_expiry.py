@@ -1,16 +1,16 @@
-"""Challenge 3B / BR2, seat-service side: holds expire, a paid (BOOKED) seat is never released.
+"""Challenge 3B / BR2, seat-service side: holds expire on their own, a paid (SOLD) seat never does.
 
 Run (seat-service on :8002, from the repo root, using the seat-service venv):
     services/seat-service/.venv/Scripts/python evidence/challenge-3b-holds/seat_hold_expiry.py
 
-Steps, all through the public API:
-  1. hold seat X for an unpaid booking; hold seat Y and confirm it (paid)
-  2. expire-holds before the hold time is up  -> 0 (an unexpired hold is kept)
-  3. wait until past holdExpiresAt (HOLD_SECONDS, 30 s by default)
-  4. expire-holds                             -> 1: X is AVAILABLE again, Y is still BOOKED
-  5. expire-holds again                       -> 0 (safe to run twice)
-  6. a new booking can now hold X
-The booking-service half (booking -> EXPIRED) is added by the booking/notification owners.
+Steps, all through the public API (nobody calls the sweep until step 5):
+  1. booking exp-unpaid holds two seats; booking exp-paid holds one and confirms it (SOLD);
+     booking exp-cancel holds one and releases it straight away (cancel frees at once)
+  2. before HOLD_SECONDS: the unpaid seats are still HELD
+  3. wait past holdExpiresAt + one EXPIRY_INTERVAL_SECONDS: the BACKGROUND JOB frees them
+  4. the paid seat is still SOLD; the expired booking can no longer confirm (409 HOLD_EXPIRED)
+  5. running the sweep by hand twice changes nothing (expiredCount 0, 0)
+The booking-service half (booking -> EXPIRED / CANCELLED) is added by the booking/notification owners.
 """
 import argparse
 import sys
@@ -31,8 +31,10 @@ def log(msg: str) -> None:
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--url", default="http://127.0.0.1:8002")  # "localhost" adds ~2 s on Windows
+    p.add_argument("--event", type=int, default=1)
+    p.add_argument("--job-interval", type=float, default=5, help="seat-service EXPIRY_INTERVAL_SECONDS")
     args = p.parse_args()
-    seats = f"{args.url}/api/v1/seats"
+    api = f"{args.url}/api/v1"
     client = httpx.Client(timeout=10, headers={"X-Correlation-Id": "challenge-3b-seat"})
     checks = []
 
@@ -40,54 +42,59 @@ def main() -> int:
         checks.append(ok)
         print(f"    {'PASS' if ok else 'FAIL'}  {name}")
 
-    def state(seat_id: int) -> dict:
-        return next(s for s in client.get(seats).json() if s["seatId"] == seat_id)
+    def states() -> dict:
+        return {s["seatNo"]: s for s in client.get(f"{api}/events/{args.event}/seats").json()}
 
-    def post(path: str, body: dict | None = None) -> httpx.Response:
-        r = client.post(f"{seats}{path}", json=body)
-        log(f"POST {path} {body or ''} -> {r.status_code} {r.json()}")
+    def post(action: str, booking: str | None = None, seats: list | None = None) -> httpx.Response:
+        body = {"bookingId": booking, "eventId": args.event, "seats": seats} if booking else None
+        r = client.post(f"{api}/seats/{action}", json=body)
+        log(f"POST /seats/{action} {booking or ''} {seats or ''} -> {r.status_code} {r.json()}")
         return r
 
-    free = [s["seatId"] for s in client.get(seats).json() if s["status"] == "AVAILABLE"]
-    if len(free) < 2:
-        print("Need 2 AVAILABLE seats; reset seat_db first")
+    def show(seat_nos: list) -> dict:
+        now = states()
+        for s in seat_nos:
+            log(f"  {s}: {now[s]['status']:9} booking={now[s]['bookingId']} holdExpiresAt={now[s]['holdExpiresAt']}")
+        return now
+
+    free = [s for s, v in states().items() if v["status"] == "AVAILABLE"]
+    if len(free) < 4:
+        print("Need 4 AVAILABLE seats; reset seat_db (services/seat-service/README.md)")
         return 2
-    unpaid, paid = free[0], free[1]
-    log(f"Using seat {unpaid} (unpaid hold) and seat {paid} (paid)")
+    unpaid, paid, cancel = free[0:2], [free[2]], [free[3]]
+    used = unpaid + paid + cancel
+    log(f"Event {args.event}: unpaid hold {unpaid}, paid {paid}, cancelled {cancel}")
 
     print("\n1. Create the holds")
-    held = post(f"/{unpaid}/hold", {"bookingId": "exp-unpaid"}).json()
-    post(f"/{paid}/hold", {"bookingId": "exp-paid"})
-    post(f"/{paid}/confirm", {"bookingId": "exp-paid"})
+    held = post("hold", "exp-unpaid", unpaid).json()
+    post("hold", "exp-paid", paid)
+    post("confirm", "exp-paid", paid)
+    post("hold", "exp-cancel", cancel)
+    r = post("release", "exp-cancel", cancel)
+    check("cancel frees the seat at once (releasedCount 1)", r.json().get("releasedCount") == 1)
+
+    print("\n2. Before the hold time is up")
+    now = show(used)
+    check("unpaid seats still HELD", all(now[s]["status"] == "HELD" for s in unpaid))
+
     expires_at = datetime.fromisoformat(held["holdExpiresAt"].replace("Z", "+00:00"))
-
-    print("\n2. Sweep before the hold time is up")
-    check("unexpired hold is kept (expiredCount 0)", post("/expire-holds").json()["expiredCount"] == 0)
-    check(f"seat {unpaid} still HELD", state(unpaid)["status"] == "HELD")
-
-    wait = (expires_at - utc_now()).total_seconds() + 2
-    print(f"\n3. Waiting {wait:.0f} s until past holdExpiresAt {held['holdExpiresAt']}")
+    wait = (expires_at - utc_now()).total_seconds() + args.job_interval + 2
+    print(f"\n3. Waiting {wait:.0f} s (past holdExpiresAt {held['holdExpiresAt']} + one job interval);"
+          " nobody calls the sweep")
     time.sleep(max(wait, 0))
+    now = show(used)
+    check("background job released the unpaid seats -> AVAILABLE, booking cleared",
+          all(now[s]["status"] == "AVAILABLE" and now[s]["bookingId"] is None for s in unpaid))
 
-    print("\n4. Sweep after expiry")
-    check("exactly the unpaid hold expired (expiredCount 1)", post("/expire-holds").json()["expiredCount"] == 1)
-    s_unpaid, s_paid = state(unpaid), state(paid)
-    log(f"seat {unpaid}: {s_unpaid}")
-    log(f"seat {paid}: {s_paid}")
-    check(f"seat {unpaid} released -> AVAILABLE, booking cleared",
-          s_unpaid["status"] == "AVAILABLE" and s_unpaid["bookingId"] is None)
-    check(f"paid seat {paid} still BOOKED by exp-paid",
-          s_paid["status"] == "BOOKED" and s_paid["bookingId"] == "exp-paid")
+    print("\n4. Paid seat and the expired booking")
+    check("paid seat still SOLD by exp-paid", now[paid[0]]["status"] == "SOLD" and now[paid[0]]["bookingId"] == "exp-paid")
+    r = post("confirm", "exp-unpaid", unpaid)
+    check("expired booking cannot confirm (409 HOLD_EXPIRED)", r.status_code == 409 and r.json()["code"] == "HOLD_EXPIRED")
 
-    print("\n5. Sweep again")
-    check("second sweep is a no-op (expiredCount 0)", post("/expire-holds").json()["expiredCount"] == 0)
-
-    print("\n6. The expired booking can no longer use the seat; a new booking can")
-    check("old booking cannot confirm (409)",
-          post(f"/{unpaid}/confirm", {"bookingId": "exp-unpaid"}).status_code == 409)
-    check("new booking can hold the released seat (200)",
-          post(f"/{unpaid}/hold", {"bookingId": "exp-new"}).status_code == 200)
-    post(f"/{unpaid}/release", {"bookingId": "exp-new"})  # clean up
+    print("\n5. Sweep by hand, twice")
+    first, second = post("expire-holds").json(), post("expire-holds").json()
+    check("sweep is safe to run again (expiredCount 0, 0)", first["expiredCount"] == 0 and second["expiredCount"] == 0)
+    check("paid seat still SOLD after the sweeps", states()[paid[0]]["status"] == "SOLD")
 
     print(f"\nRESULT: {'PASS' if all(checks) else 'FAIL'} ({sum(checks)}/{len(checks)} checks)")
     return 0 if all(checks) else 1

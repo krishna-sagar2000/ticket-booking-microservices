@@ -20,15 +20,17 @@ DEFAULT_DB_URL = "mysql+pymysql://seat_user:seat_pass@localhost:3306/seat_db"
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--db-url", default=os.getenv("DB_URL", DEFAULT_DB_URL))
-    p.add_argument("--seat", type=int, default=10)
+    p.add_argument("--event", type=int, default=1)
+    p.add_argument("--seat", default="B5")
     p.add_argument("--n", type=int, default=20)
     args = p.parse_args()
     engine = create_engine(args.db_url, pool_size=args.n, max_overflow=0)
+    where = {"e": args.event, "s": args.seat}
 
     def reset() -> None:
         with engine.begin() as c:
-            c.execute(text("UPDATE seats SET status='AVAILABLE', booking_id=NULL, held_until=NULL WHERE id=:id"),
-                      {"id": args.seat})
+            c.execute(text("UPDATE seats SET status='AVAILABLE', booking_id=NULL, hold_expires_at=NULL "
+                           "WHERE event_id=:e AND seat_no=:s"), where)
 
     reset()
     barrier = threading.Barrier(args.n)
@@ -40,13 +42,13 @@ def main() -> int:
         barrier.wait()
         with engine.begin() as c:
             # Step 1: check
-            status = c.execute(text("SELECT status FROM seats WHERE id=:id"), {"id": args.seat}).scalar()
+            status = c.execute(text("SELECT status FROM seats WHERE event_id=:e AND seat_no=:s"), where).scalar()
             if status != "AVAILABLE":
                 return
             time.sleep(0.05)  # any real work (validation, logging, a network call) widens this gap
             # Step 2: act - nothing re-checks the status, so a stale read wins
-            c.execute(text("UPDATE seats SET status='HELD', booking_id=:b WHERE id=:id"),
-                      {"b": booking_id, "id": args.seat})
+            c.execute(text("UPDATE seats SET status='HELD', booking_id=:b WHERE event_id=:e AND seat_no=:s"),
+                      {**where, "b": booking_id})
         with lock:
             believed_winners.append(booking_id)
 
@@ -57,14 +59,15 @@ def main() -> int:
         t.join()
 
     with engine.connect() as c:
-        final = c.execute(text("SELECT id, status, booking_id FROM seats WHERE id=:id"), {"id": args.seat}).one()
+        final = c.execute(text("SELECT seat_no, status, booking_id FROM seats WHERE event_id=:e AND seat_no=:s"),
+                          where).one()
     reset()
 
-    print(f"{args.n} concurrent SELECT-then-UPDATE holds on seat {args.seat}")
+    print(f"{args.n} concurrent SELECT-then-UPDATE holds on event {args.event} seat {args.seat}")
     print(f"Requests told 'you got the seat': {len(believed_winners)}")
     for b in believed_winners:
         print(f"  {b}")
-    print(f"Row actually stored: id={final.id} status={final.status} booking_id={final.booking_id}")
+    print(f"Row actually stored: seat={final.seat_no} status={final.status} booking_id={final.booking_id}")
     print(f"=> {len(believed_winners) - 1} bookings were told they hold a seat that belongs to someone else"
           if len(believed_winners) > 1 else "=> no overlap this run (timing dependent); run again")
     return 0

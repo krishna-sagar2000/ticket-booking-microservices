@@ -4,8 +4,8 @@ Tag every rule with its id, for example:
     # BR1: a seat belongs to one booking at a time
 and write a test named test_BR1_... so the report can trace rule -> code -> test.
 
-The rule checks themselves are the WHERE clauses in db.py; a rowcount of 0 means the rule
-refused the change. Only after that do we look at the seat, to pick 404 vs 409.
+The rule checks themselves are the WHERE clauses in db.py; a refused UPDATE changes nothing.
+Only after that do we read the seats, to explain the refusal (404 vs 409, which seat).
 """
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -19,42 +19,63 @@ def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
 
 
-def _iso(t: Optional[datetime]) -> Optional[str]:
+def _iso(t) -> Optional[str]:
+    if isinstance(t, str):  # SQLite (tests) returns DATETIME as text
+        t = datetime.fromisoformat(t)
     return t.isoformat() + "Z" if t else None
 
 
-def _refused(seat_id: int, code: str, message: str) -> AppError:
-    if db.get_seat(seat_id) is None:
-        return AppError(404, "SEAT_NOT_FOUND", f"Seat {seat_id} does not exist")
-    return AppError(409, code, message)
+def _require_seats(event_id: int, seat_nos: list[str]) -> dict[str, dict]:
+    """404 if the event or any seat does not exist; else the seats' current state."""
+    if not db.event_exists(event_id):
+        raise AppError(404, "EVENT_NOT_FOUND", f"Event {event_id} does not exist")
+    found = db.get_seats(event_id, seat_nos)
+    missing = [s for s in seat_nos if s not in found]
+    if missing:
+        raise AppError(404, "SEAT_NOT_FOUND", f"Seat {', '.join(missing)} does not exist for event {event_id}")
+    return found
 
 
-def list_seats() -> list[dict]:
-    return [{"seatId": s["id"], "label": s["label"], "status": s["status"],
-             "bookingId": s["bookingId"], "holdExpiresAt": _iso(s["heldUntil"])}
-            for s in db.list_seats()]
+def _result(booking_id: str, event_id: int, seat_nos: list[str], status: str, **extra) -> dict:
+    return {"bookingId": booking_id, "eventId": event_id, "seats": seat_nos, "status": status, **extra}
 
 
-# BR1: a seat belongs to one booking at a time
-def hold(seat_id: int, booking_id: str) -> dict:
+def list_seats(event_id: int) -> list[dict]:
+    if not db.event_exists(event_id):
+        raise AppError(404, "EVENT_NOT_FOUND", f"Event {event_id} does not exist")
+    return [{**s, "holdExpiresAt": _iso(s["holdExpiresAt"])} for s in db.list_seats(event_id)]
+
+
+# BR1: a seat belongs to one booking at a time (all requested seats are held, or none)
+def hold_seats(booking_id: str, event_id: int, seat_nos: list[str]) -> dict:
     expires_at = _now() + timedelta(seconds=config.HOLD_SECONDS)
-    if db.hold_seat(seat_id, booking_id, expires_at) != 1:
-        raise _refused(seat_id, "SEAT_UNAVAILABLE", "Seat already taken")
-    return {"seatId": seat_id, "status": db.HELD, "holdExpiresAt": _iso(expires_at)}
+    if not db.hold_seats(event_id, seat_nos, booking_id, expires_at):
+        found = _require_seats(event_id, seat_nos)
+        taken = [s for s in seat_nos if found[s]["status"] != db.AVAILABLE]
+        detail = f"Seat {', '.join(taken)} is already held" if taken else "A seat was taken by another booking"
+        raise AppError(409, "SEAT_UNAVAILABLE", detail)
+    return _result(booking_id, event_id, seat_nos, db.HELD, holdExpiresAt=_iso(expires_at))
 
 
-def confirm(seat_id: int, booking_id: str) -> dict:
-    if db.confirm_seat(seat_id, booking_id) != 1:
-        raise _refused(seat_id, "INVALID_STATE_CHANGE", "Seat is not held by this booking")
-    return {"seatId": seat_id, "status": db.BOOKED}
+# BR2: a seat is sold only while this booking's hold is still valid; a retry of a sale is a no-op
+def confirm_seats(booking_id: str, event_id: int, seat_nos: list[str]) -> dict:
+    if not db.confirm_seats(event_id, seat_nos, booking_id, _now()):
+        found = _require_seats(event_id, seat_nos)
+        lost = [s for s in seat_nos
+                if not (found[s]["bookingId"] == booking_id and found[s]["status"] in (db.HELD, db.SOLD))]
+        detail = (f"Seat {', '.join(lost)} is no longer held by this booking" if lost
+                  else "The hold has expired")
+        raise AppError(409, "HOLD_EXPIRED", detail)
+    return _result(booking_id, event_id, seat_nos, db.SOLD)
 
 
-def release(seat_id: int, booking_id: str) -> dict:
-    if db.release_seat(seat_id, booking_id) != 1:
-        raise _refused(seat_id, "INVALID_STATE_CHANGE", "Seat is not held by this booking")
-    return {"seatId": seat_id, "status": db.AVAILABLE}
+# BR2: a paid (SOLD) seat is never released; releasing twice is a no-op
+def release_seats(booking_id: str, event_id: int, seat_nos: list[str]) -> dict:
+    _require_seats(event_id, seat_nos)  # seats are never deleted, so this check cannot go stale
+    released = db.release_seats(event_id, seat_nos, booking_id)
+    return _result(booking_id, event_id, seat_nos, db.AVAILABLE, releasedCount=released)
 
 
-# BR2: a hold expires after HOLD_SECONDS; a paid (BOOKED) seat is never released
+# BR2: a hold expires after HOLD_SECONDS; a paid (SOLD) seat is never released
 def expire_holds() -> dict:
     return {"expiredCount": db.expire_holds(_now())}

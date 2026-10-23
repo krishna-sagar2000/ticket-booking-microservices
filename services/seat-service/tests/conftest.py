@@ -1,4 +1,5 @@
-"""Every test gets a fresh, seeded in-memory SQLite database, so tests need no MySQL/Docker.
+"""Every test gets a fresh in-memory SQLite database built from the real schema.sql and
+seed.sql (event 1, seats A1-A5 and B1-B5), so tests need no MySQL/Docker.
 
 The race-condition proof (Challenge 1) needs real MySQL and lives in evidence/challenge-1-concurrency/.
 """

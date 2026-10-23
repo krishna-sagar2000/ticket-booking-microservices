@@ -1,35 +1,41 @@
-"""Database connection, the seats table, and its queries. Seat service talks ONLY to seat_db.
+"""Database access for seat_db. Seat service talks ONLY to its own database.
 
-Every state change is ONE conditional UPDATE: the WHERE clause is the rule check, and the
-rowcount tells the caller whether it won. Never SELECT-then-UPDATE in Python (see BR1).
-Times are naive UTC datetimes passed in from Python, so all comparisons use one clock.
+Tables are created from ../schema.sql and filled from ../seed.sql (see init_db). The Table
+objects below only describe those columns for building queries; they never create anything.
+
+Every state change is ONE conditional UPDATE over all the requested seats. The WHERE clause
+is the rule check, and the number of rows it changed decides the outcome: if it is not
+every requested seat, the transaction is rolled back, so a booking gets all of its seats
+or none (BR1). Never SELECT-then-UPDATE in Python.
+Times are naive UTC datetimes passed in from Python, so writes and comparisons share one clock.
 """
 from datetime import datetime
-from typing import Optional
+from pathlib import Path
 
-from sqlalchemy import DateTime, Integer, String, create_engine, insert, select, text, update
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, create_engine, select, text, update
 
 from . import config
 
 engine = create_engine(config.DB_URL, pool_pre_ping=True) if config.DB_URL else None
 
-AVAILABLE, HELD, BOOKED = "AVAILABLE", "HELD", "BOOKED"
-SEED_LABELS = [f"A{n}" for n in range(1, 11)]
+AVAILABLE, HELD, SOLD = "AVAILABLE", "HELD", "SOLD"
+SQL_DIR = Path(__file__).resolve().parent.parent
 
-
-class Base(DeclarativeBase):
-    pass
-
-
-class Seat(Base):
-    __tablename__ = "seats"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    label: Mapped[str] = mapped_column(String(10), unique=True)
-    status: Mapped[str] = mapped_column(String(20), default=AVAILABLE, index=True)
-    booking_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    held_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+metadata = MetaData()
+events = Table(
+    "events", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("name", String(100)),
+    Column("starts_at", DateTime),
+)
+seats = Table(
+    "seats", metadata,
+    Column("event_id", Integer, primary_key=True),
+    Column("seat_no", String(10), primary_key=True),
+    Column("status", String(10)),
+    Column("booking_id", String(64)),
+    Column("hold_expires_at", DateTime),
+)
 
 
 def check_connection() -> bool:
@@ -38,63 +44,96 @@ def check_connection() -> bool:
         return conn.execute(text("SELECT 1")).scalar() == 1
 
 
+def _run_sql_file(conn, name: str) -> None:
+    sql = "\n".join(line for line in (SQL_DIR / name).read_text().splitlines()
+                    if not line.lstrip().startswith("--"))
+    if conn.dialect.name == "sqlite":  # the tests run the same files on SQLite
+        sql = sql.replace("INSERT IGNORE", "INSERT OR IGNORE")
+    for statement in sql.split(";"):
+        if statement.strip():
+            conn.execute(text(statement))
+
+
 def init_db() -> None:
-    """Create the seats table and seed A1..A10. Safe to run on every startup."""
-    Base.metadata.create_all(engine)
-    rows = [{"id": i, "label": label, "status": AVAILABLE} for i, label in enumerate(SEED_LABELS, start=1)]
+    """Create the tables (schema.sql) and add the sample rows (seed.sql). Safe on every startup."""
     with engine.begin() as conn:
-        # MySQL: INSERT IGNORE; SQLite (used by the tests): INSERT OR IGNORE
-        stmt = insert(Seat).prefix_with("IGNORE", dialect="mysql").prefix_with("OR IGNORE", dialect="sqlite")
-        conn.execute(stmt, rows)
+        _run_sql_file(conn, "schema.sql")
+        _run_sql_file(conn, "seed.sql")
 
 
-def _row_to_dict(row) -> dict:
-    return {"id": row.id, "label": row.label, "status": row.status,
-            "bookingId": row.booking_id, "heldUntil": row.held_until}
+def _seat_dict(row) -> dict:
+    return {"seatNo": row.seat_no, "status": row.status,
+            "bookingId": row.booking_id, "holdExpiresAt": row.hold_expires_at}
 
 
-def list_seats() -> list[dict]:
+def event_exists(event_id: int) -> bool:
     with engine.connect() as conn:
-        return [_row_to_dict(r) for r in conn.execute(select(Seat.__table__).order_by(Seat.id))]
+        return conn.execute(select(events.c.id).where(events.c.id == event_id)).first() is not None
 
 
-def get_seat(seat_id: int) -> Optional[dict]:
+def list_seats(event_id: int) -> list[dict]:
     with engine.connect() as conn:
-        row = conn.execute(select(Seat.__table__).where(Seat.id == seat_id)).first()
-        return _row_to_dict(row) if row else None
+        rows = conn.execute(select(seats).where(seats.c.event_id == event_id).order_by(seats.c.seat_no))
+        return [_seat_dict(r) for r in rows]
 
 
-def hold_seat(seat_id: int, booking_id: str, until: datetime) -> int:
-    """AVAILABLE -> HELD. Returns rows changed: 1 = this caller won the seat, 0 = it did not."""
-    stmt = (update(Seat)
-            .where(Seat.id == seat_id, Seat.status == AVAILABLE)
-            .values(status=HELD, booking_id=booking_id, held_until=until))
-    with engine.begin() as conn:
-        return conn.execute(stmt).rowcount
+def get_seats(event_id: int, seat_nos: list[str]) -> dict[str, dict]:
+    """Current state of the given seats, keyed by seat_no. Missing seats are left out."""
+    with engine.connect() as conn:
+        rows = conn.execute(select(seats).where(seats.c.event_id == event_id, seats.c.seat_no.in_(seat_nos)))
+        return {r.seat_no: _seat_dict(r) for r in rows}
 
 
-def confirm_seat(seat_id: int, booking_id: str) -> int:
-    """HELD (by this booking) -> BOOKED. Returns rows changed (0 or 1)."""
-    stmt = (update(Seat)
-            .where(Seat.id == seat_id, Seat.status == HELD, Seat.booking_id == booking_id)
-            .values(status=BOOKED, held_until=None))
-    with engine.begin() as conn:
-        return conn.execute(stmt).rowcount
+def _all_or_nothing(stmt, expected: int) -> bool:
+    """Run one UPDATE; commit only if it matched exactly `expected` rows, else roll back."""
+    with engine.connect() as conn:
+        tx = conn.begin()
+        if conn.execute(stmt).rowcount == expected:
+            tx.commit()
+            return True
+        tx.rollback()
+        return False
 
 
-def release_seat(seat_id: int, booking_id: str) -> int:
-    """HELD (by this booking) -> AVAILABLE. Returns rows changed (0 or 1)."""
-    stmt = (update(Seat)
-            .where(Seat.id == seat_id, Seat.status == HELD, Seat.booking_id == booking_id)
-            .values(status=AVAILABLE, booking_id=None, held_until=None))
+def _these_seats(event_id: int, seat_nos: list[str]):
+    return (seats.c.event_id == event_id) & seats.c.seat_no.in_(seat_nos)
+
+
+def hold_seats(event_id: int, seat_nos: list[str], booking_id: str, until: datetime) -> bool:
+    """AVAILABLE -> HELD for every seat, or for none. True = this booking got all of them."""
+    stmt = (update(seats)
+            .where(_these_seats(event_id, seat_nos), seats.c.status == AVAILABLE)
+            .values(status=HELD, booking_id=booking_id, hold_expires_at=until))
+    return _all_or_nothing(stmt, len(seat_nos))
+
+
+def confirm_seats(event_id: int, seat_nos: list[str], booking_id: str, now: datetime) -> bool:
+    """HELD by this booking and not expired -> SOLD, for every seat or none.
+
+    A seat this booking already bought also matches, so a retried confirm succeeds again
+    (MySQL counts matched rows, not only changed ones; SQLAlchemy's driver setting does this).
+    """
+    still_held = (seats.c.status == HELD) & (seats.c.hold_expires_at >= now)
+    stmt = (update(seats)
+            .where(_these_seats(event_id, seat_nos), seats.c.booking_id == booking_id,
+                   still_held | (seats.c.status == SOLD))
+            .values(status=SOLD, hold_expires_at=None))
+    return _all_or_nothing(stmt, len(seat_nos))
+
+
+def release_seats(event_id: int, seat_nos: list[str], booking_id: str) -> int:
+    """HELD by this booking -> AVAILABLE. SOLD seats never match. Returns how many were freed."""
+    stmt = (update(seats)
+            .where(_these_seats(event_id, seat_nos), seats.c.booking_id == booking_id, seats.c.status == HELD)
+            .values(status=AVAILABLE, booking_id=None, hold_expires_at=None))
     with engine.begin() as conn:
         return conn.execute(stmt).rowcount
 
 
 def expire_holds(now: datetime) -> int:
-    """Every HELD seat whose hold has passed -> AVAILABLE. BOOKED rows never match. Returns count."""
-    stmt = (update(Seat)
-            .where(Seat.status == HELD, Seat.held_until < now)
-            .values(status=AVAILABLE, booking_id=None, held_until=None))
+    """Every HELD seat whose hold has passed -> AVAILABLE. SOLD rows never match. Returns count."""
+    stmt = (update(seats)
+            .where(seats.c.status == HELD, seats.c.hold_expires_at < now)
+            .values(status=AVAILABLE, booking_id=None, hold_expires_at=None))
     with engine.begin() as conn:
         return conn.execute(stmt).rowcount
