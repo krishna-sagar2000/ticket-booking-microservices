@@ -36,5 +36,8 @@ def health():
     return {"status": "UP", "service": SERVICE_NAME}
 
 
-# TODO (owner): add your routes under /api/v1/... in app/api/ and include the router here.
-# TODO (owner): put business rules in app/rules.py and database code in app/db.py.
+# Owner: booking routes live in app/api/bookings.py, rules in app/rules.py,
+# the cross-service flow in app/booking_flow.py and SQL in app/db.py.
+from .api.bookings import router as bookings_router  # noqa: E402
+
+app.include_router(bookings_router)
