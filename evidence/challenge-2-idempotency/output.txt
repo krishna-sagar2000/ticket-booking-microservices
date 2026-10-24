@@ -1,0 +1,36 @@
+Challenge 2 — Payment Idempotency
+================================================
+Prerequisites: payment-service on :8003 and mock-gateway on :8005
+
+[1] Same key and same request twice
+First response:  201 {"bookingId":"challenge2-replay-001","amount":"500.00","status":"APPROVED"}
+Second response: 201 {"amount":"500.00","status":"APPROVED","bookingId":"challenge2-replay-001"}
+Responses match: True
+Expected: same successful result; one payment row for this booking.
+
+[2] Same key, different amount
+First response:  201 {"bookingId":"challenge2-different-001","amount":"500.00","status":"APPROVED"}
+Second response: 422 {"code":"IDEMPOTENCY_KEY_REUSED","message":"Idempotency-Key was already used with a different request","correlationId":"8b45f8ae-704f-48f8-9cd1-5e69a7472580"}
+Different body rejected with 422: True
+Expected error code: IDEMPOTENCY_KEY_REUSED
+
+[3] Two simultaneous requests with the same key
+Concurrent response 1: 201 {"bookingId":"challenge2-race-001","amount":"700.00","status":"APPROVED"}
+Concurrent response 2: 409 {"code":"REQUEST_IN_PROGRESS","message":"A request with this Idempotency-Key is still processing","correlationId":"845aff44-016e-4e39-9d1d-43fada410506"}
+Concurrent successful responses: 1
+Expected: no more than one gateway charge and one payment row.
+
+[Database verification]
+Payment: {'booking_id': 'challenge2-different-001', 'amount': Decimal('500.00'), 'status': 'CONFIRMED'}
+Payment: {'booking_id': 'challenge2-race-001', 'amount': Decimal('700.00'), 'status': 'CONFIRMED'}
+Payment: {'booking_id': 'challenge2-replay-001', 'amount': Decimal('500.00'), 'status': 'CONFIRMED'}
+Rows for challenge2-different-001: 1
+Rows for challenge2-race-001: 1
+Rows for challenge2-replay-001: 1
+
+Note: the script's process-local counter cannot count requests sent
+by a separate Uvicorn process. Use payment-service logs to verify
+gateway calls; do not treat the process-local counter as proof.
+Database snapshot saved: evidence/challenge-2-idempotency/database_dump.sql
+Challenge 2 payment rows captured: 3
+Challenge 2 idempotency rows captured: 3
