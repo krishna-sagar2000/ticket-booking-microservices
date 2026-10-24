@@ -4,9 +4,12 @@ Run:  uvicorn app.main:app --port 8003 --reload
 Docs: http://localhost:8003/docs
 """
 import uuid
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from . import config
+from . import config, db
+from .api.payments import router as payments_router
 from .errors import (AppError, app_error_handler, validation_error_handler,
                      unhandled_error_handler)
 from .logging_setup import correlation_id_var, setup_logging
@@ -14,7 +17,20 @@ from .logging_setup import correlation_id_var, setup_logging
 SERVICE_NAME = "payment-service"
 log = setup_logging(SERVICE_NAME)
 
-app = FastAPI(title="Payment Service", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Creates payment_db tables from schema.sql if missing. Safe to run every
+    # startup (CREATE TABLE IF NOT EXISTS) - a fresh clone needs no manual
+    # `mysql ... < schema.sql` step, matching seat-service and
+    # notification-service.
+    db.init_db()
+    log.info("payment_db tables ensured")
+    yield
+
+
+app = FastAPI(title="Payment Service", version="1.0.0", lifespan=lifespan)
+app.include_router(payments_router)
 app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(Exception, unhandled_error_handler)
@@ -34,7 +50,3 @@ async def correlation_middleware(request: Request, call_next):
 @app.get("/health", tags=["health"])
 def health():
     return {"status": "UP", "service": SERVICE_NAME}
-
-
-# TODO (owner): add your routes under /api/v1/... in app/api/ and include the router here.
-# TODO (owner): put business rules in app/rules.py and database code in app/db.py.
