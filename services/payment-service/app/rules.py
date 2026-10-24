@@ -140,20 +140,18 @@ def process_payment(
             "message": "Payment gateway is unavailable",
         }
         with engine.begin() as conn:
+            # The gateway being down is retryable: do NOT mark the idempotency
+            # key as DONE, and remove the payment reservation. Otherwise a
+            # retry with the SAME key after the gateway recovers would be
+            # replayed forever as the cached 503 and could never succeed.
+            # Compare to booking-service's db.idem_drop() for the same pattern.
             conn.execute(
-                text("""
-                    UPDATE payments SET status = 'FAILED'
-                    WHERE booking_id = :booking_id
-                """),
+                text("DELETE FROM payments WHERE booking_id = :booking_id"),
                 {"booking_id": booking_id},
             )
             conn.execute(
-                text("""
-                    UPDATE idempotency_keys
-                    SET status = 'DONE', response_code = 503, response_body = :body
-                    WHERE idem_key = :key
-                """),
-                {"key": idempotency_key, "body": _json(body)},
+                text("DELETE FROM idempotency_keys WHERE idem_key = :key"),
+                {"key": idempotency_key},
             )
         raise AppError(503, body["code"], body["message"])
 
