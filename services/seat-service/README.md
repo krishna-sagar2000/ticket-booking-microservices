@@ -45,7 +45,8 @@ Tests build an in-memory SQLite database from the same `schema.sql` and `seed.sq
 - **confirm** succeeds only if every seat is HELD by this booking and the hold has not expired (otherwise 409 `HOLD_EXPIRED`, nothing changes). Confirming again for the same booking returns 200, so booking-service can retry safely.
 - **release** frees this booking's HELD seats and returns how many it freed. It never frees a SOLD seat and never touches another booking's seat. Releasing again returns 200 with `releasedCount: 0`.
 - **expire-holds** runs the BR2 sweep by hand. The background job already runs it every `EXPIRY_INTERVAL_SECONDS`; this endpoint is for demos and evidence.
-- Validation (400 `VALIDATION_ERROR`): `bookingId` 1-64 chars, `eventId` >= 1, `seats` 1-10 seat numbers (1-10 chars each), no repeats.
+- Validation (400 `VALIDATION_ERROR`): `bookingId` 1-64 chars, `eventId` >= 1, `seats` 1-10 seat numbers (1-10 chars each), no repeats. Seat numbers are trimmed and upper-cased (`" a1 "` is `A1`, and `["A1","a1"]` is a repeat), so every database matches them the same way.
+- Full scenario check against a running service (90 checks): `evidence/tests/seat_api_check.py`, last output in `evidence/tests/seat_api_check_output.txt`.
 - Errors use the shared body `{"code", "message", "correlationId"}`. Send `X-Correlation-Id`; it is echoed back and logged.
 
 Seat states: `AVAILABLE -> HELD` (hold) `-> SOLD` (confirm), or `HELD -> AVAILABLE` (release, or the expiry job once `hold_expires_at` has passed). `SOLD` is final.

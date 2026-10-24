@@ -36,6 +36,10 @@ def _require_seats(event_id: int, seat_nos: list[str]) -> dict[str, dict]:
     return found
 
 
+def _seats_phrase(seat_nos: list[str]) -> str:
+    return f"Seat {seat_nos[0]} is" if len(seat_nos) == 1 else f"Seats {', '.join(seat_nos)} are"
+
+
 def _result(booking_id: str, event_id: int, seat_nos: list[str], status: str, **extra) -> dict:
     return {"bookingId": booking_id, "eventId": event_id, "seats": seat_nos, "status": status, **extra}
 
@@ -51,8 +55,11 @@ def hold_seats(booking_id: str, event_id: int, seat_nos: list[str]) -> dict:
     expires_at = _now() + timedelta(seconds=config.HOLD_SECONDS)
     if not db.hold_seats(event_id, seat_nos, booking_id, expires_at):
         found = _require_seats(event_id, seat_nos)
-        taken = [s for s in seat_nos if found[s]["status"] != db.AVAILABLE]
-        detail = f"Seat {', '.join(taken)} is already held" if taken else "A seat was taken by another booking"
+        held = [s for s in seat_nos if found[s]["status"] == db.HELD]
+        sold = [s for s in seat_nos if found[s]["status"] == db.SOLD]
+        parts = ([f"{_seats_phrase(held)} already held"] if held else []) + \
+                ([f"{_seats_phrase(sold)} already sold"] if sold else [])
+        detail = "; ".join(parts) or "A seat was taken by another booking"
         raise AppError(409, "SEAT_UNAVAILABLE", detail)
     return _result(booking_id, event_id, seat_nos, db.HELD, holdExpiresAt=_iso(expires_at))
 
@@ -63,7 +70,7 @@ def confirm_seats(booking_id: str, event_id: int, seat_nos: list[str]) -> dict:
         found = _require_seats(event_id, seat_nos)
         lost = [s for s in seat_nos
                 if not (found[s]["bookingId"] == booking_id and found[s]["status"] in (db.HELD, db.SOLD))]
-        detail = (f"Seat {', '.join(lost)} is no longer held by this booking" if lost
+        detail = (f"{_seats_phrase(lost)} no longer held by this booking" if lost
                   else "The hold has expired")
         raise AppError(409, "HOLD_EXPIRED", detail)
     return _result(booking_id, event_id, seat_nos, db.SOLD)

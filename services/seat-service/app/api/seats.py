@@ -25,7 +25,9 @@ async def lifespan(app):
 
 router = APIRouter(prefix="/api/v1", tags=["seats"], lifespan=lifespan)
 
-SeatNo = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10)]
+# Upper-cased so " a1 " and "A1" are the same seat on every database (MySQL compares
+# case-insensitively, SQLite does not) and the duplicate check below sees them as one.
+SeatNo = Annotated[str, StringConstraints(strip_whitespace=True, to_upper=True, min_length=1, max_length=10)]
 
 
 class SeatRequest(BaseModel):

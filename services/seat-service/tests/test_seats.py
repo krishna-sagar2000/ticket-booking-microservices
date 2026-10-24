@@ -150,6 +150,18 @@ def test_hold_response_shape():
     assert seat("A2")["holdExpiresAt"] == body["holdExpiresAt"]
 
 
+def test_seat_numbers_are_normalised():
+    r = hold("b1", " a1 ")
+    assert r.status_code == 200 and r.json()["seats"] == ["A1"]
+    assert seat("A1")["bookingId"] == "b1"
+    assert confirm("b1", "a1").status_code == 200
+
+
+def test_same_seat_in_different_case_is_a_duplicate():
+    r = client.post(f"{API}/seats/hold", json={"bookingId": "b1", "eventId": 1, "seats": ["A1", "a1"]})
+    assert r.status_code == 400 and r.json()["code"] == "VALIDATION_ERROR"
+
+
 def test_hold_unknown_event_is_404():
     r = call("hold", "b1", ["A1"], event_id=99)
     assert r.status_code == 404 and r.json()["code"] == "EVENT_NOT_FOUND"
