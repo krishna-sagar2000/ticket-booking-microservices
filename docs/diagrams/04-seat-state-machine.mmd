@@ -1,0 +1,12 @@
+stateDiagram-v2
+    [*] --> AVAILABLE: seat seeded for event
+    AVAILABLE --> HELD: hold succeeds (atomic UPDATE)
+    HELD --> SOLD: confirm (payment approved)
+    HELD --> AVAILABLE: release (cancel) or hold expiry sweep
+    SOLD --> [*]
+
+    note right of SOLD
+        A SOLD seat is never
+        released by expiry or
+        by release (BR2).
+    end note

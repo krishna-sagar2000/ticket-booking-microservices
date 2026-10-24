@@ -1,0 +1,42 @@
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant B as Booking
+    participant S as Seat
+    participant P as Payment
+    participant G as Gateway
+    participant N as Notification
+
+    C->>B: POST /bookings {eventId, seats, customerEmail}
+    B->>S: POST /seats/hold {bookingId, eventId, seats}
+    S-->>B: 200 HELD (all or none) / 409 SEAT_UNAVAILABLE
+    B-->>C: 201 {bookingId, status: HELD, holdExpiresAt}
+
+    C->>B: POST /bookings/{id}/pay (Idempotency-Key: k1)
+    Note over B: save k1 as IN_PROGRESS (PK)<br/>BR3 check: HELD and not expired<br/>claim booking (pay_lock)
+    B->>P: POST /payments (Idempotency-Key: k1)
+    P->>G: POST /charge (timeout 5s)
+
+    alt Happy path: gateway OK
+        G-->>P: 200 APPROVED
+        P-->>B: 201 {paymentId, APPROVED}
+        B->>S: POST /seats/confirm
+        S-->>B: 200 SOLD
+        Note over B: HELD -> CONFIRMED<br/>save response under k1
+        B--)N: POST /notifications (best effort)
+        B-->>C: 200 {status: CONFIRMED}
+    else Failure path: gateway DOWN or SLOW
+        G--xP: 503 / timeout
+        P-->>B: 503 PAYMENT_GATEWAY_UNAVAILABLE
+        Note over B,P: release pay_lock, drop k1 (retryable)<br/>booking stays HELD
+        B-->>C: 503 (client may retry with k1)
+        Note over C,G: gateway recovers
+        C->>B: POST /bookings/{id}/pay (same Idempotency-Key: k1)
+        B->>P: POST /payments (Idempotency-Key: k1)
+        P->>G: POST /charge
+        G-->>P: 200 APPROVED
+        P-->>B: 201 {paymentId, APPROVED}
+        B->>S: POST /seats/confirm
+        S-->>B: 200 SOLD
+        B-->>C: 200 {status: CONFIRMED}
+    end

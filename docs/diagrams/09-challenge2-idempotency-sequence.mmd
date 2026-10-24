@@ -1,0 +1,30 @@
+sequenceDiagram
+    autonumber
+    participant R1 as Request A
+    participant R2 as Request B (same key, same moment)
+    participant P as Payment Service
+    participant DB as payment_db
+    participant G as Gateway
+
+    par Simultaneous identical requests
+        R1->>P: POST /payments (Idempotency-Key: k1)
+        R2->>P: POST /payments (Idempotency-Key: k1)
+    end
+
+    P->>DB: INSERT idempotency_keys (k1, IN_PROGRESS)
+    Note over DB: Primary key on idem_key:<br/>only ONE insert can win
+    DB-->>P: Request A wins (insert OK)
+    DB--xP: Request B loses (duplicate key / IntegrityError)
+
+    P->>G: (A only) POST /charge
+    G-->>P: 200 APPROVED
+    P->>DB: UPDATE idempotency_keys SET status=DONE, response=...
+
+    P-->>R2: 409 REQUEST_IN_PROGRESS (B asked while A still running)
+    Note over R2,P: B retries shortly after
+    R2->>P: POST /payments (Idempotency-Key: k1) [retry]
+    P->>DB: SELECT idempotency_keys WHERE idem_key=k1
+    DB-->>P: status=DONE, same response as A
+    P-->>R2: 201 (identical response to A, gateway NOT charged again)
+
+    P-->>R1: 201 APPROVED

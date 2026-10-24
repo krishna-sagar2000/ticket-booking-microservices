@@ -1,0 +1,14 @@
+erDiagram
+    events ||--o{ seats : "has"
+    events {
+        int id PK
+        varchar name
+        datetime starts_at
+    }
+    seats {
+        int event_id PK "composite key with seat_no"
+        varchar seat_no PK "composite key with event_id"
+        varchar status "AVAILABLE or HELD or SOLD"
+        varchar booking_id "owned by Booking service, no FK across DBs"
+        datetime hold_expires_at "BR2: null unless HELD"
+    }

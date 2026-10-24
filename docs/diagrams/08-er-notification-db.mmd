@@ -1,0 +1,8 @@
+erDiagram
+    notifications {
+        int id PK
+        varchar booking_id "owned by Booking service, no FK across DBs"
+        varchar type "e.g. BOOKING_CONFIRMED"
+        text message
+        datetime created_at
+    }
