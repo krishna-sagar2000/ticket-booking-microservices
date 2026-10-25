@@ -1,6 +1,6 @@
 # Payment Service
 
-Owner: ________    Review partner: ________
+Owner: Aarzoo    Review partner: Anwesa
 
 ## Run (from this folder)
 ```

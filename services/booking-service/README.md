@@ -1,6 +1,6 @@
 # Booking Service (port 8001, `booking_db`)
 
-Owner: ________    Review partner: ________ (Notification owner)
+Owner: Aishwarya    Review partner: Krishna Sagar (Notification owner)
 
 **One sentence:** runs the booking lifecycle (HELD → CONFIRMED / CANCELLED / EXPIRED), enforces BR3 and the Booking side of BR4, and coordinates Seat, Payment and Notification over REST.
 

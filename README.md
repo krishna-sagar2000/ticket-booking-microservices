@@ -4,11 +4,11 @@ Four services + a mock payment gateway. Python 3.11+ / FastAPI / MySQL 8. Databa
 
 | Service | Port | Database | Owner |
 |---|---|---|---|
-| booking-service | 8001 | booking_db | ________ |
-| seat-service | 8002 | seat_db | ________ |
-| payment-service | 8003 | payment_db | ________ |
-| notification-service | 8004 | notification_db | ________ |
-| mock-gateway | 8005 | none | ________ |
+| booking-service | 8001 | booking_db | Aishwarya |
+| seat-service | 8002 | seat_db | Anwesa |
+| payment-service | 8003 | payment_db | Aarzoo |
+| notification-service | 8004 | notification_db | Krishna Sagar |
+| mock-gateway | 8005 | none | Krishna Sagar |
 
 ## First-time setup (everyone)
 1. Install Python 3.11+, Git, Docker Desktop.
