@@ -1,0 +1,10 @@
+flowchart LR
+    C["Client / Test Script"] -- "HTTP/REST /api/v1" --> B["Booking Service :8001"]
+    B -- "REST: hold / confirm / release" --> S["Seat Service :8002"]
+    B -- "REST: charge + Idempotency-Key" --> P["Payment Service :8003"]
+    B -- "REST: record (best effort)" --> N["Notification Service :8004"]
+    P -- "REST: /charge, 5s timeout" --> G["Mock Payment Gateway :8005"]
+    B --- BDB[("booking_db")]
+    S --- SDB[("seat_db")]
+    P --- PDB[("payment_db")]
+    N --- NDB[("notification_db")]

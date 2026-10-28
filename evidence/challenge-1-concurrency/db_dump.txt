@@ -1,0 +1,16 @@
+-- seat_db.seats right after race_hold.py (run 1 -> seat 5, run 2 -> seat 6)
+-- docker exec ticket-mysql mysql -u root -p -t -e "SELECT * FROM seat_db.seats ORDER BY id"
++----+-------+-----------+------------+---------------------+
+| id | label | status    | booking_id | held_until          |
++----+-------+-----------+------------+---------------------+
+|  1 | A1    | AVAILABLE | NULL       | NULL                |
+|  2 | A2    | AVAILABLE | NULL       | NULL                |
+|  3 | A3    | AVAILABLE | NULL       | NULL                |
+|  4 | A4    | AVAILABLE | NULL       | NULL                |
+|  5 | A5    | HELD      | race-00    | 2026-10-22 19:10:31 |
+|  6 | A6    | HELD      | race-19    | 2026-10-22 19:10:37 |
+|  7 | A7    | AVAILABLE | NULL       | NULL                |
+|  8 | A8    | AVAILABLE | NULL       | NULL                |
+|  9 | A9    | AVAILABLE | NULL       | NULL                |
+| 10 | A10   | AVAILABLE | NULL       | NULL                |
++----+-------+-----------+------------+---------------------+

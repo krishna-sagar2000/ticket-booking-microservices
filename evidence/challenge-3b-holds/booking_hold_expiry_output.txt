@@ -1,0 +1,64 @@
+[14:55:50Z] Challenge 3B booking side, run c0e7b3
+[14:55:50Z] health booking: {'status': 'UP', 'service': 'booking-service'}
+[14:55:50Z] health seat: {'status': 'UP', 'service': 'seat-service'}
+[14:55:50Z] clean-up of earlier runs: {'expiredCount': 3}
+[14:55:50Z] 
+=== 1. one unpaid booking, one paid booking ===
+[14:55:51Z] POST /api/v1/bookings -> 201 {"bookingId":"c502ee0b-ac43-446e-b35b-def83cce320b","eventId":1,"seats":["A1"],"customerEmail":"unpaid@example.com","amount":250.0,"status":"HELD","holdExpiresAt":"2026-10-24T14:56:20Z","paymentId":null,"createdAt":"2026-10-24T14:55:50Z"}
+[14:55:51Z] POST /api/v1/bookings -> 201 {"bookingId":"7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c","eventId":1,"seats":["A2"],"customerEmail":"paid@example.com","amount":250.0,"status":"HELD","holdExpiresAt":"2026-10-24T14:56:21Z","paymentId":null,"createdAt":"2026-10-24T14:55:51Z"}
+[14:55:51Z] POST /api/v1/bookings/7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c/pay -> 200 {"bookingId":"7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c","eventId":1,"seats":["A2"],"customerEmail":"paid@example.com","amount":250.0,"status":"CONFIRMED","holdExpiresAt":"2026-10-24T14:56:21Z","paymentId":null,"createdAt":"2026-10-24T14:55:51Z"}
+[14:55:51Z]     PASS  paid booking is CONFIRMED
+[14:55:51Z] UNPAID = c502ee0b-ac43-446e-b35b-def83cce320b seat A1, holdExpiresAt 2026-10-24T14:56:20Z
+[14:55:51Z] PAID   = 7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c seat A2
+[14:55:51Z]   --- booking_db.bookings BEFORE expiry (DB UTC time 2026-10-24 14:55:51) ---
+[14:55:51Z]   id                                     seat  status     hold_expires_at      payment_id   pay_lock  updated_at
+[14:55:51Z]   c502ee0b-ac43-446e-b35b-def83cce320b   A1    HELD       2026-10-24 14:56:20  None         None      2026-10-24 14:55:50
+[14:55:51Z]   7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c   A2    CONFIRMED  2026-10-24 14:56:21  None         None      2026-10-24 14:55:51
+[14:55:51Z]     PASS  UNPAID is HELD, PAID is CONFIRMED
+[14:55:51Z] 
+=== 2. expire before the hold ends ===
+[14:55:51Z] POST /api/v1/bookings/expire -> 200 {"expiredCount":0}
+[14:55:51Z]     PASS  expiredCount 0 before HOLD_SECONDS
+[14:55:51Z]   --- booking_db.bookings after early expire (DB UTC time 2026-10-24 14:55:51) ---
+[14:55:51Z]   id                                     seat  status     hold_expires_at      payment_id   pay_lock  updated_at
+[14:55:51Z]   c502ee0b-ac43-446e-b35b-def83cce320b   A1    HELD       2026-10-24 14:56:20  None         None      2026-10-24 14:55:50
+[14:55:51Z]   7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c   A2    CONFIRMED  2026-10-24 14:56:21  None         None      2026-10-24 14:55:51
+[14:55:51Z]     PASS  UNPAID still HELD
+[14:55:51Z] 
+=== 3. waiting 30 s, past UNPAID's holdExpiresAt ===
+[14:56:22Z] POST /api/v1/bookings/expire -> 200 {"expiredCount":1}
+[14:56:22Z]     PASS  expiredCount 1: only UNPAID expired
+[14:56:22Z]   --- booking_db.bookings AFTER expiry (DB UTC time 2026-10-24 14:56:22) ---
+[14:56:22Z]   id                                     seat  status     hold_expires_at      payment_id   pay_lock  updated_at
+[14:56:22Z]   c502ee0b-ac43-446e-b35b-def83cce320b   A1    EXPIRED    2026-10-24 14:56:20  None         None      2026-10-24 14:56:22
+[14:56:22Z]   7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c   A2    CONFIRMED  2026-10-24 14:56:21  None         None      2026-10-24 14:55:51
+[14:56:22Z]     PASS  UNPAID is EXPIRED
+[14:56:22Z]     PASS  PAID is still CONFIRMED (never touched by expiry)
+[14:56:22Z] 
+=== 4. expire again ===
+[14:56:22Z] POST /api/v1/bookings/expire -> 200 {"expiredCount":0}
+[14:56:22Z]     PASS  second run: no error, expiredCount 0
+[14:56:22Z] 
+=== 5. expired and paid bookings are final ===
+[14:56:22Z] POST /api/v1/bookings/c502ee0b-ac43-446e-b35b-def83cce320b/pay -> 409 {"code":"HOLD_EXPIRED","message":"The seat hold has expired; create a new booking","correlationId":"c3b-c0e7b3-pay-expired"}
+[14:56:22Z]     PASS  paying the EXPIRED booking -> 409 HOLD_EXPIRED (BR3)
+[14:56:22Z] POST /api/v1/bookings/7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c/pay -> 409 {"code":"BOOKING_NOT_PAYABLE","message":"Booking is CONFIRMED; only a HELD booking can be paid","correlationId":"c3b-c0e7b3-pay-again"}
+[14:56:22Z]     PASS  paying the CONFIRMED booking again -> 409 BOOKING_NOT_PAYABLE
+[14:56:22Z] POST /api/v1/bookings/7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c/cancel -> 409 {"code":"INVALID_STATE_CHANGE","message":"Booking cannot change from CONFIRMED to CANCELLED","correlationId":"c3b-c0e7b3-cancel-paid"}
+[14:56:22Z]     PASS  cancelling the CONFIRMED booking -> 409 INVALID_STATE_CHANGE
+[14:56:22Z] 
+=== 6. Seat service agrees ===
+[14:56:22Z] POST /api/v1/seats/expire-holds -> 200 {"expiredCount":1}
+[14:56:22Z]   seat A1: AVAILABLE booking=None
+[14:56:22Z]   seat A2: SOLD      booking=7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c
+[14:56:22Z]     PASS  seat A1 (UNPAID) is AVAILABLE again
+[14:56:22Z]     PASS  seat A2 (PAID) is still SOLD to the paid booking
+[14:56:22Z] POST /api/v1/bookings -> 201 {"bookingId":"d587c7e4-c986-4fbb-a48b-4c3d44f0a56d","eventId":1,"seats":["A1"],"customerEmail":"next@example.com","amount":250.0,"status":"HELD","holdExpiresAt":"2026-10-24T14:56:52Z","paymentId":null,"createdAt":"2026-10-24T14:56:22Z"}
+[14:56:22Z]     PASS  seat A1 can be booked again
+[14:56:22Z] POST /api/v1/bookings/d587c7e4-c986-4fbb-a48b-4c3d44f0a56d/cancel -> 200 {"bookingId":"d587c7e4-c986-4fbb-a48b-4c3d44f0a56d","eventId":1,"seats":["A1"],"customerEmail":"next@example.com","amount":250.0,"status":"CANCELLED","holdExpiresAt":"2026-10-24T14:56:52Z","paymentId":null,"createdAt":"2026-10-24T14:56:22Z"}
+[14:56:22Z]   --- booking_db.bookings FINAL (DB UTC time 2026-10-24 14:56:22) ---
+[14:56:22Z]   id                                     seat  status     hold_expires_at      payment_id   pay_lock  updated_at
+[14:56:22Z]   c502ee0b-ac43-446e-b35b-def83cce320b   A1    EXPIRED    2026-10-24 14:56:20  None         None      2026-10-24 14:56:22
+[14:56:22Z]   7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c   A2    CONFIRMED  2026-10-24 14:56:21  None         None      2026-10-24 14:55:51
+[14:56:22Z] 
+RESULT: PASS, 14/14 checks

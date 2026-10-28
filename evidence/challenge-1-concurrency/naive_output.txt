@@ -1,0 +1,24 @@
+20 concurrent SELECT-then-UPDATE holds on seat 10
+Requests told 'you got the seat': 20
+  naive-19
+  naive-00
+  naive-01
+  naive-05
+  naive-02
+  naive-15
+  naive-11
+  naive-12
+  naive-17
+  naive-13
+  naive-18
+  naive-03
+  naive-14
+  naive-16
+  naive-07
+  naive-06
+  naive-04
+  naive-09
+  naive-08
+  naive-10
+Row actually stored: id=10 status=HELD booking_id=naive-10
+=> 19 bookings were told they hold a seat that belongs to someone else

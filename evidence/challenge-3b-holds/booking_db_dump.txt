@@ -1,0 +1,19 @@
+--- booking_db.bookings BEFORE expiry (DB UTC time 2026-10-24 14:55:51) ---
+id                                     seat  status     hold_expires_at      payment_id   pay_lock  updated_at
+c502ee0b-ac43-446e-b35b-def83cce320b   A1    HELD       2026-10-24 14:56:20  None         None      2026-10-24 14:55:50
+7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c   A2    CONFIRMED  2026-10-24 14:56:21  None         None      2026-10-24 14:55:51
+
+--- booking_db.bookings after early expire (DB UTC time 2026-10-24 14:55:51) ---
+id                                     seat  status     hold_expires_at      payment_id   pay_lock  updated_at
+c502ee0b-ac43-446e-b35b-def83cce320b   A1    HELD       2026-10-24 14:56:20  None         None      2026-10-24 14:55:50
+7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c   A2    CONFIRMED  2026-10-24 14:56:21  None         None      2026-10-24 14:55:51
+
+--- booking_db.bookings AFTER expiry (DB UTC time 2026-10-24 14:56:22) ---
+id                                     seat  status     hold_expires_at      payment_id   pay_lock  updated_at
+c502ee0b-ac43-446e-b35b-def83cce320b   A1    EXPIRED    2026-10-24 14:56:20  None         None      2026-10-24 14:56:22
+7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c   A2    CONFIRMED  2026-10-24 14:56:21  None         None      2026-10-24 14:55:51
+
+--- booking_db.bookings FINAL (DB UTC time 2026-10-24 14:56:22) ---
+id                                     seat  status     hold_expires_at      payment_id   pay_lock  updated_at
+c502ee0b-ac43-446e-b35b-def83cce320b   A1    EXPIRED    2026-10-24 14:56:20  None         None      2026-10-24 14:56:22
+7f8da7b6-f9dc-4b59-ba5a-b617cb272a0c   A2    CONFIRMED  2026-10-24 14:56:21  None         None      2026-10-24 14:55:51

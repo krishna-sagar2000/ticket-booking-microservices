@@ -36,5 +36,6 @@ def health():
     return {"status": "UP", "service": SERVICE_NAME}
 
 
-# TODO (owner): add your routes under /api/v1/... in app/api/ and include the router here.
-# TODO (owner): put business rules in app/rules.py and database code in app/db.py.
+from .api.seats import router as seats_router  # noqa: E402
+
+app.include_router(seats_router)

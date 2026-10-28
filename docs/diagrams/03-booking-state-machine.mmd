@@ -1,0 +1,16 @@
+stateDiagram-v2
+    [*] --> HELD: Seat held all requested seats
+    HELD --> CONFIRMED: payment approved + seats confirmed
+    HELD --> CANCELLED: customer cancels (seats released)
+    HELD --> EXPIRED: hold time passed before payment
+    CONFIRMED --> [*]
+    CANCELLED --> [*]
+    EXPIRED --> [*]
+
+    note right of HELD
+        Any other transition is
+        rejected with 409
+        INVALID_STATE_CHANGE.
+        A failed payment leaves
+        the booking HELD.
+    end note

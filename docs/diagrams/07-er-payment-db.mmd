@@ -1,0 +1,17 @@
+erDiagram
+    payments {
+        bigint id PK
+        varchar booking_id UK "UNIQUE: one payment per booking ever"
+        decimal amount
+        varchar status "PROCESSING or CONFIRMED or FAILED"
+        json gateway_response
+        timestamp created_at
+    }
+    idempotency_keys {
+        varchar idem_key PK "BR4: one row per key"
+        char request_hash "SHA-256 of bookingId+amount"
+        varchar status "IN_PROGRESS or DONE"
+        int response_code
+        json response_body
+        timestamp created_at
+    }

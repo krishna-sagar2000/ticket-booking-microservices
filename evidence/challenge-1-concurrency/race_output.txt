@@ -1,0 +1,41 @@
+## Run 1: 20 parallel requests, seat-service running with uvicorn --workers 4
+Seat 5 before the race: {'seatId': 5, 'label': 'A5', 'status': 'AVAILABLE', 'bookingId': None, 'holdExpiresAt': None}
+
+20 parallel POST http://127.0.0.1:8002/api/v1/seats/5/hold:
+  race-00  ->  200  2026-10-22T19:10:31Z  (23 ms)
+  race-01  ->  409  SEAT_UNAVAILABLE  (29 ms)
+  race-02  ->  409  SEAT_UNAVAILABLE  (30 ms)
+  race-03  ->  409  SEAT_UNAVAILABLE  (31 ms)
+  race-04  ->  409  SEAT_UNAVAILABLE  (42 ms)
+  race-05  ->  409  SEAT_UNAVAILABLE  (32 ms)
+  race-06  ->  409  SEAT_UNAVAILABLE  (30 ms)
+  race-07  ->  409  SEAT_UNAVAILABLE  (27 ms)
+  race-08  ->  409  SEAT_UNAVAILABLE  (32 ms)
+  race-09  ->  409  SEAT_UNAVAILABLE  (26 ms)
+  race-10  ->  409  SEAT_UNAVAILABLE  (41 ms)
+  race-11  ->  409  SEAT_UNAVAILABLE  (24 ms)
+  race-12  ->  409  SEAT_UNAVAILABLE  (32 ms)
+  race-13  ->  409  SEAT_UNAVAILABLE  (25 ms)
+  race-14  ->  409  SEAT_UNAVAILABLE  (27 ms)
+  race-15  ->  409  SEAT_UNAVAILABLE  (27 ms)
+  race-16  ->  409  SEAT_UNAVAILABLE  (40 ms)
+  race-17  ->  409  SEAT_UNAVAILABLE  (30 ms)
+  race-18  ->  409  SEAT_UNAVAILABLE  (44 ms)
+  race-19  ->  409  SEAT_UNAVAILABLE  (43 ms)
+
+Status counts: {200: 1, 409: 19}
+Winner(s): ['race-00']
+Seat 5 after the race: {'seatId': 5, 'label': 'A5', 'status': 'HELD', 'bookingId': 'race-00', 'holdExpiresAt': '2026-10-22T19:10:31Z'}
+
+RESULT: PASS - exactly one booking holds the seat
+
+## Run 2: 50 parallel requests, seat 6
+Seat 6 before the race: {'seatId': 6, 'label': 'A6', 'status': 'AVAILABLE', 'bookingId': None, 'holdExpiresAt': None}
+
+50 parallel POST http://127.0.0.1:8002/api/v1/seats/6/hold:
+
+Status counts: {409: 49, 200: 1}
+Winner(s): ['race-19']
+Seat 6 after the race: {'seatId': 6, 'label': 'A6', 'status': 'HELD', 'bookingId': 'race-19', 'holdExpiresAt': '2026-10-22T19:10:37Z'}
+
+RESULT: PASS - exactly one booking holds the seat

@@ -1,6 +1,6 @@
 # Notification Service
 
-Owner: ________    Review partner: ________
+Owner: Krishna Sagar    Review partner: Aishwarya
 
 ## Run (from this folder)
 ```
