@@ -19,6 +19,18 @@ On startup the service runs `schema.sql` (tables) and `seed.sql` (event 1, seats
 
 Settings (`.env`): `PORT`, `DB_URL`, `HOLD_SECONDS` (30), `EXPIRY_INTERVAL_SECONDS` (5, how often the expiry job runs).
 
+## Run in Docker (from this folder)
+```
+copy .env.example .env           (Windows)   |   cp .env.example .env
+# set MYSQL_ROOT_PASSWORD and SEAT_DB_PASSWORD in .env
+docker compose up --build
+```
+This starts two containers: `seat-db` (MySQL 8, data in the `seat_db_data` volume, port not published) and `seat-service` (image `ticket-booking/seat-service:1.0`, port 8002). Settings reach the container as environment variables: `DB_URL` points at `seat-db`, not `127.0.0.1`, which inside a container means the container itself. The image holds no `.env` file and no password (`.dockerignore`), and runs as a non-root user.
+
+`seat-service` waits for `seat-db` to be **healthy** (`depends_on: condition: service_healthy`), because the service runs `schema.sql` on startup and fails if MySQL is not accepting connections yet. Both containers have a health check: `docker compose ps` shows `(healthy)`.
+
+Useful commands: `docker compose ps`, `docker compose logs -f seat-service`, `docker inspect seat-service-seat-service-1`, `docker compose down` (keeps the data), `docker compose down -v` (also deletes the seat data).
+
 ### Reset the seats (fresh demo / after a schema change)
 ```
 docker exec ticket-mysql mysql -u seat_user -pseat_pass seat_db -e "DROP TABLE IF EXISTS seats, events"

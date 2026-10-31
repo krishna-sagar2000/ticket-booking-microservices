@@ -1,0 +1,114 @@
+Seat-service API check against http://127.0.0.1:8002 at 2026-10-24 06:27:43Z
+
+== Health, docs, cross-cutting
+  PASS  GET /health -> 200 UP
+  PASS  GET /docs -> 200 (Swagger UI)
+  PASS  OpenAPI lists all 6 paths
+  PASS  X-Correlation-Id echoed on the response
+  PASS  X-Correlation-Id generated when missing
+  PASS  error body carries the request's correlation id
+
+== GET /api/v1/events/{id}/seats
+  PASS  event 1 lists A1-A5, B1-B5 in order
+  PASS  each seat has seatNo, status, bookingId, holdExpiresAt
+  PASS  unknown event -> 404 EVENT_NOT_FOUND
+  PASS  non-numeric event id -> 400
+
+== POST /api/v1/seats/hold (BR1)
+  PASS  hold one free seat -> 200, full response shape
+  PASS  holdExpiresAt is about now + 30 s
+  PASS  list shows A1 HELD by h1 with the same expiry
+  PASS  same seat, other booking -> 409 SEAT_UNAVAILABLE
+  PASS  same seat, SAME booking again -> 409 (a hold is not repeatable)
+  PASS  hold two seats -> 200, both HELD
+  PASS  overlapping multi-seat hold -> 409 naming the taken seat
+  PASS  ...and the free seat of that request was NOT held (all or none)
+  PASS  hold with an unknown seat -> 404 SEAT_NOT_FOUND
+  PASS  ...and A4 was NOT held
+  PASS  hold in an unknown event -> 404 EVENT_NOT_FOUND
+  PASS  seat numbers are trimmed and upper-cased: ' a4 ' holds A4
+  PASS  ...and 'a4' releases it again
+  PASS  same seat in two cases ['A4','a4'] -> 400 (duplicate)
+
+== Validation -> 400 VALIDATION_ERROR (shared error format)
+  PASS  hold: empty object
+  PASS  hold: missing bookingId
+  PASS  hold: missing eventId
+  PASS  hold: missing seats
+  PASS  hold: empty seats list
+  PASS  hold: 11 seats (max 10)
+  PASS  hold: repeated seat
+  PASS  hold: empty seat number
+  PASS  hold: seat number > 10 chars
+  PASS  hold: empty bookingId
+  PASS  hold: bookingId > 64 chars
+  PASS  hold: eventId 0
+  PASS  hold: eventId negative
+  PASS  hold: eventId text
+  PASS  hold: eventId decimal
+  PASS  hold: seats as a string
+  PASS  hold: seat number as int
+  PASS  hold: bookingId as int
+  PASS  hold: malformed JSON
+  PASS  hold: no body
+  PASS  confirm: empty object
+  PASS  release: empty object
+  PASS  nothing was held by the invalid requests
+
+== POST /api/v1/seats/confirm
+  PASS  confirm by another booking -> 409 HOLD_EXPIRED
+  PASS  ...A1 still HELD by h1
+  PASS  confirm incl. a seat this booking never held -> 409 naming it
+  PASS  ...and A2 was NOT sold (all or none)
+  PASS  confirm own held seat -> 200 SOLD
+  PASS  list shows A1 SOLD, booking kept, expiry cleared
+  PASS  confirm again (retry) -> 200 SOLD, no change
+  PASS  confirm a SOLD seat as another booking -> 409
+  PASS  confirm an AVAILABLE seat -> 409
+  PASS  hold a SOLD seat -> 409 'already sold'
+  PASS  confirm an unknown seat -> 404
+  PASS  confirm in an unknown event -> 404
+  PASS  confirm two held seats together -> 200 SOLD
+
+== POST /api/v1/seats/release
+  PASS  release own held seats -> 200, releasedCount 2
+  PASS  ...both AVAILABLE with booking cleared
+  PASS  release again -> 200, releasedCount 0
+  PASS  release a SOLD seat -> 200, releasedCount 0 (BR2)
+  PASS  ...A1 still SOLD
+  PASS  release another booking's seat -> releasedCount 0
+  PASS  ...B1 still HELD by r2
+  PASS  release a mix of own-held and free seats -> frees only own (1)
+  PASS  release an unknown seat -> 404
+  PASS  release in an unknown event -> 404
+  PASS  released seat can be held by a new booking
+
+== Concurrency (BR1, Challenge 1)
+  PASS  20 parallel holds on one seat -> exactly 1 x 200, 19 x 409
+  PASS  ...seat HELD by the single winner
+  PASS  10 parallel confirms by the winner -> all 200, seat SOLD
+  PASS  20 parallel overlapping 2-seat holds -> winners hold both, losers none (2 won)
+  PASS  parallel duplicate releases free each seat exactly once
+  PASS  ...ring seats all AVAILABLE again
+
+== Expiry (BR2)
+  PASS  POST /seats/expire-holds with nothing expired -> 200 {expiredCount: 0}
+  PASS  [2 s hold instance] hold -> 200
+  PASS  [2 s hold] confirm while still valid -> 200 SOLD
+  PASS  [2 s hold] confirm after expiry, before any sweep -> 409 HOLD_EXPIRED
+  PASS  ...seat was NOT sold
+  PASS  ...and the sweep frees it
+  PASS  hold B3+B4 for the background-job check
+  ...waiting 36 s for the hold to expire; nobody calls the sweep
+  PASS  background job released B3+B4 on its own
+  PASS  SOLD seats untouched by the job (A1, A2, A3, B2)
+  PASS  expired booking can no longer confirm -> 409
+  PASS  manual sweep twice afterwards -> 0, 0
+
+== Shared error format outside the seat routes (framework defaults)
+  PASS  unknown route -> 404
+  INFO  unknown route body: {"detail":"Not Found"}
+  PASS  wrong method (GET /seats/hold) -> 405
+  INFO  wrong method body: {"detail":"Method Not Allowed"}
+
+TOTAL: 90 passed, 0 failed, 90 checks
