@@ -1,0 +1,38 @@
+# Seat Service on its own: MySQL + seat-service. Run from this folder:
+#   docker compose up --build
+# Passwords come from .env in this folder (see .env.example); they are never committed.
+services:
+  seat-db:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: seat_db
+      MYSQL_USER: seat_user
+      MYSQL_PASSWORD: ${SEAT_DB_PASSWORD:?set SEAT_DB_PASSWORD in .env}
+    volumes:
+      - seat_db_data:/var/lib/mysql
+    healthcheck:
+      # TCP ping: MySQL's first-start init server listens on the socket only, so this
+      # passes only once the real server accepts connections.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  seat-service:
+    build: .
+    image: ticket-booking/seat-service:1.0
+    environment:
+      PORT: 8002
+      DB_URL: mysql+pymysql://seat_user:${SEAT_DB_PASSWORD}@seat-db:3306/seat_db
+      HOLD_SECONDS: ${HOLD_SECONDS:-30}
+      EXPIRY_INTERVAL_SECONDS: ${EXPIRY_INTERVAL_SECONDS:-5}
+    ports:
+      - "8002:8002"
+    depends_on:
+      seat-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  seat_db_data:
