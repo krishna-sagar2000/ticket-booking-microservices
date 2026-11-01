@@ -1,0 +1,16 @@
+# Never send secrets or local environments into the image.
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Not needed at run time.
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+dev/
+*.md
+Dockerfile
+.dockerignore

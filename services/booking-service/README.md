@@ -1,6 +1,6 @@
 # Booking Service (port 8001, `booking_db`)
 
-Owner: Aishwarya    Review partner: Krishna Sagar (Notification owner)
+Owner: ________    Review partner: ________ (Notification owner)
 
 **One sentence:** runs the booking lifecycle (HELD → CONFIRMED / CANCELLED / EXPIRED), enforces BR3 and the Booking side of BR4, and coordinates Seat, Payment and Notification over REST.
 
@@ -82,3 +82,50 @@ All calls send `X-Correlation-Id`, use URLs from `.env` and have timeouts (`SERV
 
 ## Settings (`.env`)
 `PORT`, `DB_URL`, `SEAT_SERVICE_URL`, `PAYMENT_SERVICE_URL`, `NOTIFICATION_SERVICE_URL`, `HOLD_SECONDS` (30), `SEAT_PRICE` (250.00), `MAX_SEATS_PER_BOOKING` (6), `SERVICE_TIMEOUT_SECONDS` (3), `PAYMENT_TIMEOUT_SECONDS` (8), `PAY_LOCK_TTL_SECONDS` (60).
+
+## Docker (Assignment 2)
+
+The image is built from `Dockerfile`; `.dockerignore` keeps `.env`, `.venv`, tests and dev stubs out of it.
+All settings come from environment variables given by Docker Compose; nothing is hard-coded and no password is baked in.
+
+```
+docker build -t ticket-booking/booking-service:1.0 services/booking-service   # from the repo root
+```
+
+Service block for the team's `docker-compose.yml` (service names must match the other blocks):
+```yaml
+  booking-service:
+    build: ./services/booking-service
+    image: ticket-booking/booking-service:1.0
+    ports:
+      - "8001:8001"
+    environment:
+      PORT: "8001"
+      DB_URL: mysql+pymysql://booking_user:${BOOKING_DB_PASSWORD}@mysql:3306/booking_db
+      SEAT_SERVICE_URL: http://seat-service:8002
+      PAYMENT_SERVICE_URL: http://payment-service:8003
+      NOTIFICATION_SERVICE_URL: http://notification-service:8004
+      HOLD_SECONDS: "30"
+      PAYMENT_TIMEOUT_SECONDS: "8"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      seat-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+    restart: unless-stopped
+```
+`BOOKING_DB_PASSWORD` is read from the repo-root `.env` (git-ignored); `.env.example` holds only a placeholder.
+
+Inside containers, `localhost` means the container itself: other services and MySQL are reached by their
+compose service names (`mysql`, `seat-service`, ...), and uvicorn listens on `0.0.0.0`.
+
+Check it: `docker compose ps` (booking-service shows `healthy`), `docker compose logs booking-service`,
+`curl localhost:8001/health`, then `python scripts/e2e_booking_flow.py`.
+
+If MySQL is not ready when the first request arrives, that request fails and the next one retries
+(`app/db.py: init_engine` remembers the engine only after the tables are created;
+test: `tests/test_db_startup.py`).

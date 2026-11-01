@@ -66,8 +66,12 @@ def init_engine(url: str | None = None) -> Engine:
     kwargs = {"pool_pre_ping": True}
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False, "timeout": 15}
-    _engine = create_engine(url, **kwargs)
-    metadata.create_all(_engine)
+    engine = create_engine(url, **kwargs)
+    # Create the tables BEFORE remembering the engine. If the database is not ready yet
+    # (common when containers start together), this raises and the next request simply
+    # tries again, instead of keeping an engine whose tables were never created.
+    metadata.create_all(engine)
+    _engine = engine
     return _engine
 
 
