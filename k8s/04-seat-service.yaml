@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seat-service
+  namespace: ticket-booking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: seat-service
+  template:
+    metadata:
+      labels:
+        app: seat-service
+    spec:
+      # Kubernetes has no built-in "wait for dependency healthy" like Compose's
+      # depends_on/condition: service_healthy, so an initContainer does the waiting
+      # instead: it loops until MySQL answers, then exits, and only then does the
+      # real seat-service container start.
+      initContainers:
+        - name: wait-for-mysql
+          image: mysql:8
+          command:
+            - sh
+            - -c
+            - until mysqladmin ping -h mysql -uroot -prootpass --silent; do echo waiting for mysql; sleep 2; done
+      containers:
+        - name: seat-service
+          image: ticket-booking/seat-service:1.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "8002"
+            - name: DB_URL
+              value: mysql+pymysql://seat_user:seat_pass@mysql:3306/seat_db
+            - name: HOLD_SECONDS
+              value: "30"
+            - name: EXPIRY_INTERVAL_SECONDS
+              value: "5"
+          ports:
+            - containerPort: 8002
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seat-service
+  namespace: ticket-booking
+spec:
+  type: NodePort   # externally reachable too, useful for checking seat state directly during a demo
+  selector:
+    app: seat-service
+  ports:
+    - port: 8002
+      targetPort: 8002

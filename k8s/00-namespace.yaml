@@ -1,0 +1,7 @@
+# All Assignment 2 Kubernetes resources live in their own namespace, so they never
+# collide with anything else already running in the cluster, and `kubectl get all -n
+# ticket-booking` shows the whole system in one command.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ticket-booking
