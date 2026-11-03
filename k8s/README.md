@@ -40,30 +40,42 @@ choco install kubernetes-cli
 ```
 
 ### 2. Start Minikube
+On Windows, the default driver Minikube picks (VirtualBox) needs hardware
+virtualisation (VT-x/AMD-V) enabled in the BIOS, which is often off on laptops by
+default and gives a `HOST_VIRT_UNAVAILABLE` error. Since Docker Desktop is already
+required for this project, use the `docker` driver instead - no BIOS changes needed:
 ```
-minikube start
+minikube start --driver=docker
 ```
-First start downloads a VM/container image and can take a few minutes.
+Make sure Docker Desktop is running first. First start downloads a ~500 MB base
+image and can take a few minutes; this only happens once.
 
-### 3. Build the five application images where Minikube can see them
-Minikube runs its own Docker daemon, separate from your normal `docker` command, so
-the images built earlier for `docker compose` are not automatically visible to it.
-Point your shell at Minikube's Docker daemon, then rebuild (same Dockerfiles, same
-tags, no code changes):
+### 3. Build the five application images, then load them into Minikube
+Minikube runs its own internal container runtime, separate from your normal `docker`
+command, so images built normally are not automatically visible to it. The
+officially documented way to bridge this is `minikube docker-env`, but **on Windows
+with Minikube's containerd runtime this currently fails** with
+`SSH_AGENT_START: starting an SSH agent on Windows is not yet supported`. Use
+`minikube image load` instead, which works reliably: build normally with your usual
+Docker daemon, then explicitly copy each image into Minikube.
 
-PowerShell:
 ```
-& minikube -p minikube docker-env --shell powershell | Invoke-Expression
-
 docker build -t ticket-booking/mock-gateway:1.0 services/mock-gateway
 docker build -t ticket-booking/seat-service:1.0 services/seat-service
 docker build -t ticket-booking/payment-service:1.0 services/payment-service
 docker build -t ticket-booking/notification-service:1.0 services/notification-service
 docker build -t ticket-booking/booking-service:1.0 services/booking-service
-```
 
-(To go back to your normal Docker daemon afterwards, open a new terminal, or run
-`minikube docker-env --unset | Invoke-Expression`.)
+minikube image load ticket-booking/mock-gateway:1.0
+minikube image load ticket-booking/seat-service:1.0
+minikube image load ticket-booking/payment-service:1.0
+minikube image load ticket-booking/notification-service:1.0
+minikube image load ticket-booking/booking-service:1.0
+```
+Verify they landed inside Minikube:
+```
+minikube image ls | findstr ticket-booking
+```
 
 ## Deploy
 
@@ -99,23 +111,26 @@ kubectl get svc -n ticket-booking
 
 ## Prove the main workflow actually works (not just "pods Running")
 
-Get the externally-reachable URL for booking-service and seat-service:
+`minikube service <name> --url` needs its own long-running terminal window on
+Windows with the Docker driver (it prints "the terminal needs to be open to run
+it"), which is inconvenient for scripted checks. `kubectl port-forward` is simpler
+and works the same way regardless of driver - run each of these in the background
+(or in its own terminal window):
 ```
-minikube service booking-service -n ticket-booking --url
-minikube service seat-service -n ticket-booking --url
+kubectl port-forward -n ticket-booking svc/booking-service 18001:8001
+kubectl port-forward -n ticket-booking svc/seat-service 18002:8002
 ```
-Each prints a URL like `http://127.0.0.1:NNNNN`. Use those in place of
-`localhost:8001` / `localhost:8002` to run the same checks used against Docker
-Compose, for example:
+Then, from another terminal:
 ```
-curl <booking-url>/health
-curl <seat-url>/api/v1/events/1/seats
-curl -X POST <booking-url>/api/v1/bookings -H "Content-Type: application/json" -d "{\"eventId\":1,\"seats\":[\"A1\"],\"customerEmail\":\"k8s-test@example.com\"}"
-curl -X POST <booking-url>/api/v1/bookings/<bookingId>/pay -H "Idempotency-Key: k8s-test-1"
+curl http://localhost:18001/health
+curl http://localhost:18002/api/v1/events/1/seats
+curl -X POST http://localhost:18001/api/v1/bookings -H "Content-Type: application/json" -d "{\"eventId\":1,\"seats\":[\"A1\"],\"customerEmail\":\"k8s-test@example.com\"}"
+curl -X POST http://localhost:18001/api/v1/bookings/<bookingId>/pay -H "Idempotency-Key: k8s-test-1"
 ```
 A `201 HELD` followed by a `200 CONFIRMED` proves the whole chain - booking, seat,
 payment, mock-gateway, notification - is working through the real Kubernetes
-deployment, not just that pods are Running.
+deployment, not just that pods are Running. This exact sequence was run and
+verified while building this deployment.
 
 ## Logs and troubleshooting
 
@@ -133,7 +148,7 @@ kubectl delete namespace ticket-booking
 This removes everything created above, including the PersistentVolumeClaim (MySQL
 data is lost - re-apply from scratch for a fresh demo).
 
-## Optional, if time allows: scaling and self-healing (1 more Part B mark)
+## Scaling and self-healing (1 more Part B mark - already verified working)
 
 Scale seat-service to 3 replicas and show it still works (seat-service holds no
 state in the pod itself, it is all in MySQL, so this is safe):
