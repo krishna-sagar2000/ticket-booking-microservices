@@ -51,12 +51,32 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "Request is not valid",
             "content": {
               "application/json": {
+                "example": {
+                  "code": "VALIDATION_ERROR",
+                  "message": "Request is not valid",
+                  "correlationId": "c0ffee-42"
+                },
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Event does not exist",
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "EVENT_NOT_FOUND",
+                  "message": "Event 99 does not exist",
+                  "correlationId": "c0ffee-42"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -90,12 +110,47 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "Request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorBody"
+                },
+                "example": {
+                  "code": "VALIDATION_ERROR",
+                  "message": "Request is not valid",
+                  "correlationId": "c0ffee-42"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Event or seat does not exist (EVENT_NOT_FOUND / SEAT_NOT_FOUND)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                },
+                "example": {
+                  "code": "SEAT_NOT_FOUND",
+                  "message": "Seat Z9 does not exist for event 1",
+                  "correlationId": "c0ffee-42"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A seat is already held or sold; nothing was held",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                },
+                "example": {
+                  "code": "SEAT_UNAVAILABLE",
+                  "message": "Seat A1 is already held",
+                  "correlationId": "c0ffee-42"
                 }
               }
             }
@@ -129,12 +184,47 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "Request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorBody"
+                },
+                "example": {
+                  "code": "VALIDATION_ERROR",
+                  "message": "Request is not valid",
+                  "correlationId": "c0ffee-42"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Event or seat does not exist (EVENT_NOT_FOUND / SEAT_NOT_FOUND)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                },
+                "example": {
+                  "code": "SEAT_NOT_FOUND",
+                  "message": "Seat Z9 does not exist for event 1",
+                  "correlationId": "c0ffee-42"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Hold expired or seats not held by this booking; nothing was sold",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                },
+                "example": {
+                  "code": "HOLD_EXPIRED",
+                  "message": "The hold has expired",
+                  "correlationId": "c0ffee-42"
                 }
               }
             }
@@ -168,12 +258,32 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "Request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorBody"
+                },
+                "example": {
+                  "code": "VALIDATION_ERROR",
+                  "message": "Request is not valid",
+                  "correlationId": "c0ffee-42"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Event or seat does not exist (EVENT_NOT_FOUND / SEAT_NOT_FOUND)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                },
+                "example": {
+                  "code": "SEAT_NOT_FOUND",
+                  "message": "Seat Z9 does not exist for event 1",
+                  "correlationId": "c0ffee-42"
                 }
               }
             }
@@ -203,18 +313,29 @@
   },
   "components": {
     "schemas": {
-      "HTTPValidationError": {
+      "ErrorBody": {
         "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "type": "array",
-            "title": "Detail"
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "correlationId": {
+            "type": "string",
+            "title": "Correlationid"
           }
         },
         "type": "object",
-        "title": "HTTPValidationError"
+        "required": [
+          "code",
+          "message",
+          "correlationId"
+        ],
+        "title": "ErrorBody",
+        "description": "The shared error format (app/errors.py), listed here so the OpenAPI docs show it."
       },
       "SeatRequest": {
         "properties": {
@@ -261,39 +382,6 @@
         ],
         "title": "SeatRequest",
         "description": "Body of hold / confirm / release: which seats of which event, for which booking."
-      },
-      "ValidationError": {
-        "properties": {
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "type": "array",
-            "title": "Location"
-          },
-          "msg": {
-            "type": "string",
-            "title": "Message"
-          },
-          "type": {
-            "type": "string",
-            "title": "Error Type"
-          }
-        },
-        "type": "object",
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError"
       }
     }
   }

@@ -6,6 +6,7 @@ Docs: http://localhost:8002/docs
 import uuid
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.openapi.utils import get_openapi
 from . import config
 from .errors import (AppError, app_error_handler, validation_error_handler,
                      unhandled_error_handler)
@@ -39,3 +40,19 @@ def health():
 from .api.seats import router as seats_router  # noqa: E402
 
 app.include_router(seats_router)
+
+
+def openapi_without_422():
+    """Validation errors are returned as 400 VALIDATION_ERROR (errors.py), so drop FastAPI's default 422."""
+    if app.openapi_schema is None:
+        schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+        for ops in schema["paths"].values():
+            for op in ops.values():
+                op["responses"].pop("422", None)
+        for name in ("HTTPValidationError", "ValidationError"):
+            schema.get("components", {}).get("schemas", {}).pop(name, None)
+        app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = openapi_without_422

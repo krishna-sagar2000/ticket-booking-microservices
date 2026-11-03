@@ -44,22 +44,48 @@ class SeatRequest(BaseModel):
         return v
 
 
-@router.get("/events/{event_id}/seats", summary="List the seats of an event and their status")
+class ErrorBody(BaseModel):
+    """The shared error format (app/errors.py), listed here so the OpenAPI docs show it."""
+    code: str
+    message: str
+    correlationId: str
+
+
+def _error(description: str, code: str, message: str) -> dict:
+    return {"model": ErrorBody, "description": description,
+            "content": {"application/json": {"example": {"code": code, "message": message,
+                                                         "correlationId": "c0ffee-42"}}}}
+
+
+BAD_REQUEST = {400: _error("Request is not valid", "VALIDATION_ERROR", "Request is not valid")}
+NOT_FOUND = {404: _error("Event or seat does not exist (EVENT_NOT_FOUND / SEAT_NOT_FOUND)",
+                         "SEAT_NOT_FOUND", "Seat Z9 does not exist for event 1")}
+
+
+@router.get("/events/{event_id}/seats", summary="List the seats of an event and their status",
+            responses={**BAD_REQUEST, 404: _error("Event does not exist", "EVENT_NOT_FOUND", "Event 99 does not exist")})
 def list_seats(event_id: int):
     return rules.list_seats(event_id)
 
 
-@router.post("/seats/hold", summary="Hold seats for a booking, all or none (BR1)")
+@router.post("/seats/hold", summary="Hold seats for a booking, all or none (BR1)",
+             responses={**BAD_REQUEST, **NOT_FOUND,
+                        409: _error("A seat is already held or sold; nothing was held", "SEAT_UNAVAILABLE",
+                                    "Seat A1 is already held")})
 def hold(body: SeatRequest):
     return rules.hold_seats(body.bookingId, body.eventId, body.seats)
 
 
-@router.post("/seats/confirm", summary="Turn this booking's held seats into SOLD")
+@router.post("/seats/confirm", summary="Turn this booking's held seats into SOLD",
+             responses={**BAD_REQUEST, **NOT_FOUND,
+                        409: _error("Hold expired or seats not held by this booking; nothing was sold",
+                                    "HOLD_EXPIRED", "The hold has expired")})
 def confirm(body: SeatRequest):
     return rules.confirm_seats(body.bookingId, body.eventId, body.seats)
 
 
-@router.post("/seats/release", summary="Free this booking's held seats (SOLD seats are never freed)")
+@router.post("/seats/release", summary="Free this booking's held seats (SOLD seats are never freed)",
+             responses={**BAD_REQUEST, **NOT_FOUND})
 def release(body: SeatRequest):
     return rules.release_seats(body.bookingId, body.eventId, body.seats)
 
